@@ -1,5 +1,7 @@
 import logging
-import datetime
+from datetime import datetime, timedelta
+# import datetime
+
 import time
 import re
 
@@ -8,8 +10,6 @@ from telegram.ext import ApplicationBuilder, CallbackContext, CommandHandler, Co
 
 TOKEN_BOT = "6624761473:AAHSarWlGYBMro_RHS6oOyuWYspoxEP84b8"
 
-'''user_data_expense = dict()
-user_data_income = dict()'''
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -18,15 +18,26 @@ logging.basicConfig(
 
 list_categories = ['food', 'transport', 'entertainment']
 
+"""-------------------------------------work with data--------------------------------------"""
 locale_time_now = time.localtime()
-time_string = time.strftime("%H:%M:%S, %d/%m/%Y", locale_time_now)
-time_string_file = time.strftime("%d/%m/%Y-%d/%m")
+current_date = datetime.now().date()
 
-# input_FILE = "input_data_user.txt"
-FILENAME = "data_user.txt"
+time_string = time.strftime("%H:%M:%S, %Y-%m-%d", locale_time_now)
 
-re_exp_inc = r'(\d+): \[(\d+)\] - (\d{2}:\d{2}:\d{2}), (\d{2}/\d{2}/\d{4}) - \'(income|expense)\' - (\w+) - (\d+)'
-re_exp_inc_1 = r'(\[(\d+)\] - (\d{2}:\d{2}:\d{2}), (\d{2}/\d{2}/\d{4}) - \'(income|expense)\' - (\w+) - (\d+)'
+# data_now = time.strftime("%d/%m/%Y")
+# data_string = time.strftime("%d-%m-%Y", locale_time_now)
+# time_string_file = time.strftime("%d/%m/%Y-%d/%m")
+
+
+current_week_start = current_date - timedelta(days=current_date.weekday())
+current_week_end = current_week_start + timedelta(days=6)
+"""------------------------------------------------------------------------------------------"""
+
+FILENAME = "input_data_user.txt"
+# FILENAME = "data_user.txt"
+
+# re_exp_inc = r'(\d+): \[(\d+)\] - (\d{2}:\d{2}:\d{2}), (\d{2}-\d{2}-\d{4}) - \'(income|expense)\' - (\w+) - (\d+)'
+re_exp_inc = r'(\d+): \[(\d+)\] - (\d{2}:\d{2}:\d{2}), (\d{4}-\d{2}-\d{2}) - \'(income|expense)\' - (\w+) - (\d+)'
 
 
 class FinanceTracker:
@@ -50,16 +61,20 @@ class FinanceTracker:
 """------------------------------------------------------------------------------------------------------------------"""
 
 
-def fun_read_file(user_id, value=None):
+def fun_check_user_id(user_id):
 
     with open(FILENAME, 'r') as file:
-
-        list_id_user = []
 
         for line in file:
             match = re.match(re_exp_inc, line)
 
-            if match is None:
+            if match:
+                group2 = match.group(2)
+
+                if int(group2) == user_id:
+                    return user_id
+
+            '''if match is None:
                 return False
 
             if match:
@@ -74,7 +89,7 @@ def fun_read_file(user_id, value=None):
                         return user_id
 
             case _:
-                return "Incorrect number"
+                return "Incorrect number"'''
 
 
 def fun_read_data_file(us_id, time_write, exp_inc, categories_write, suma_write):
@@ -133,10 +148,12 @@ async def start_add_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if categories not in list_categories:
         await update.message.reply_text("Ви ввели не вірну категорію!!!")
         return
+    if not suma.isdigit():
+        await update.message.reply_text("Ви ввели не цифри!!!")
+        return
+
     else:
         finance_tracker = FinanceTracker(time_string, 'expense', categories, suma)
-        # user_data_expense[user_id].append(finance_tracker)
-
         fun_read_data_file(user_id, time_string, 'expense', categories, suma)
 
     await update.message.reply_text(f"{finance_tracker} Successful")
@@ -149,20 +166,22 @@ async def start_add_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     categories = user_message[0].strip()
     suma = user_message[1].strip()
 
-    finance_tracker = FinanceTracker(time_string, 'income', categories, suma)
-    # user_data_income[user_id].append(finance_tracker)
+    if not suma.isdigit():
+        await update.message.reply_text("Ви ввели не цифри!!!")
+        return
 
+    finance_tracker = FinanceTracker(time_string, 'income', categories, suma)
     fun_read_data_file(user_id, time_string, 'income', categories, suma)
 
     await update.message.reply_text(f"{finance_tracker} Successful")
 
 
-async def show_added_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def show_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
 
     logging.info('Command "/show_add_expense" was triggered')
 
-    if fun_read_file(user_id, 1) != user_id:
+    if fun_check_user_id(user_id) != user_id:
         await update.message.reply_text("You don't have any EXPENSE records")
         return
 
@@ -185,16 +204,15 @@ async def show_added_expense(update: Update, context: ContextTypes.DEFAULT_TYPE)
         for _ in list_for_data:
             result = '\n'.join(list_for_data)
 
-    # result = '\n'.join([f"{i + 1}. {t}" for i, t in enumerate(list_for_data)])
     await update.message.reply_text(result)
 
 
-async def show_added_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def show_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
 
     logging.info('Command "/show_add_income" was triggered')
 
-    if fun_read_file(user_id, 1) != user_id:
+    if fun_check_user_id(user_id) != user_id:
         await update.message.reply_text("You don't have any EXPENSE records")
         return
 
@@ -217,8 +235,76 @@ async def show_added_income(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         for _ in list_for_data:
             result = '\n'.join(list_for_data)
 
-    # result = '\n'.join([f"{i + 1}. {t}" for i, t in enumerate(list_for_data)])
     await update.message.reply_text(result)
+
+
+async def view_all_transactions(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    logging.info('Command "/view_all_transactions" was triggered')
+
+    if fun_check_user_id(user_id) != user_id:
+        await update.message.reply_text("You don't have any expense to remove")
+        return
+
+    with open(FILENAME, 'r') as file:
+
+        list_for_data = []
+
+        for line in file:
+            match = re.match(re_exp_inc, line)
+            if match:
+                group1 = match.group(1)  # Group 1: 2
+                group2 = match.group(2)  # Group 2: 444238872
+                group3 = match.group(3)  # Group 3: 16:24:37
+                group4 = match.group(4)  # Group 4: 26/08/2023
+                group5 = match.group(5)  # Group 5: income/expense
+                group6 = match.group(6)  # Group 6: ['food', 'transport', 'entertainment']
+                group7 = match.group(7)  # Group 7: 9642
+
+                if int(group2) == user_id:
+                    list_for_data.append(f'{int(group1)}: {group4} - {group3} - {group5} - {group6} - {group7}')
+
+        for _ in list_for_data:
+            result = '\n'.join(list_for_data)
+
+    await update.message.reply_text(f"All_transactions:\n{result}")
+
+
+async def view_expenses_by_week(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+
+    logging.info('Command "/view_expenses_by_week" was triggered')
+
+    if fun_check_user_id(user_id) != user_id:
+        await update.message.reply_text("You don't have any expense to remove")
+        return
+
+    list_for_data = []
+
+    with open(FILENAME, 'r') as file:
+
+        filtered_data = []
+
+        for line in file:
+            match = re.match(re_exp_inc, line)
+            if match:
+                group1 = match.group(1)  # Group 1: 2
+                group2 = match.group(2)  # Group 2: 444238872
+                group3 = match.group(3)  # Group 3: 16:24:37
+                group4 = match.group(4)  # Group 4: 26/08/2023
+                group5 = match.group(5)  # Group 5: income/expense
+                group6 = match.group(6)  # Group 6: ['food', 'transport', 'entertainment']
+                group7 = match.group(7)  # Group 7: 9642
+
+                line_date = datetime.strptime(group4, "%Y-%m-%d").date()
+
+                if group5 == 'expense' and int(group2) == user_id and current_week_start <= line_date <= current_week_end:
+                    list_for_data.append(f'{int(group1)}: {group6} - {group7}')
+
+        for _ in list_for_data:
+            result = '\n'.join(list_for_data)
+
+    await update.message.reply_text(f"All_transactions week:\n{result}")
 
 
 async def remove_expense(update: Update, context: CallbackContext) -> None:
@@ -228,16 +314,15 @@ async def remove_expense(update: Update, context: CallbackContext) -> None:
 
     removed_idx = int(context.args[0])
 
-    if fun_read_file(user_id, 1) != user_id:
+    if fun_check_user_id(user_id) != user_id:
         await update.message.reply_text("You don't have any expense to remove")
         return
 
     with open(FILENAME, 'r') as file:
 
         text_file = file.readlines()
-        count = 0
+
         for line in text_file:
-            count += 1
             match = re.match(re_exp_inc, line)
             if match:
                 group1 = match.group(1)
@@ -265,16 +350,13 @@ async def remove_income(update: Update, context: CallbackContext) -> None:
 
     removed_idx = int(context.args[0])
 
-    if fun_read_file(user_id, 1) != user_id:
+    if fun_check_user_id(user_id) != user_id:
         await update.message.reply_text("You don't have any expense to remove")
         return
 
     with open(FILENAME, 'r') as file:
-
         text_file = file.readlines()
-        count = 0
         for line in text_file:
-            count += 1
             match = re.match(re_exp_inc, line)
             if match:
                 group1 = match.group(1)
@@ -304,10 +386,12 @@ def run():
     app.add_handler(CommandHandler("categories", show_categories))
     app.add_handler(CommandHandler("add_expense", start_add_expense))
     app.add_handler(CommandHandler("add_income", start_add_income))
-    app.add_handler(CommandHandler("show_added_expense", show_added_expense))
-    app.add_handler(CommandHandler("show_added_income", show_added_income))
+    app.add_handler(CommandHandler("show_expense", show_expense))
+    app.add_handler(CommandHandler("show_income", show_income))
     app.add_handler(CommandHandler("remove_expense", remove_expense))
     app.add_handler(CommandHandler("remove_income", remove_income))
+    app.add_handler(CommandHandler("view_all_transactions", view_all_transactions))
+    app.add_handler(CommandHandler("view_transactions_week", view_expenses_by_week))
 
     app.run_polling()
 
