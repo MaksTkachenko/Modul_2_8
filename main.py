@@ -28,9 +28,15 @@ time_string = time.strftime("%H:%M:%S, %Y-%m-%d", locale_time_now)
 # data_string = time.strftime("%d-%m-%Y", locale_time_now)
 # time_string_file = time.strftime("%d/%m/%Y-%d/%m")
 
-
+# Знаходимо перший та останній день поточного тижня
 current_week_start = current_date - timedelta(days=current_date.weekday())
 current_week_end = current_week_start + timedelta(days=6)
+
+# Визначаємо початок поточного місяця
+current_month_start = current_date.replace(day=1)
+# Знаходимо кінець поточного місяця
+next_month = current_date.replace(day=28) + timedelta(days=4)  # Додаємо 4 дні, щоб впевнитися, що ми в межах місяця
+current_month_end = next_month - timedelta(days=next_month.day)
 """------------------------------------------------------------------------------------------"""
 
 FILENAME = "input_data_user.txt"
@@ -92,7 +98,7 @@ def fun_check_user_id(user_id):
                 return "Incorrect number"'''
 
 
-def fun_read_data_file(us_id, time_write, exp_inc, categories_write, suma_write):
+def fun_write_data_file(us_id, time_write, exp_inc, categories_write, suma_write):
 
     data_to_append = {f"[{us_id}] - {time_write} - '{exp_inc}' - {categories_write} - {suma_write}"}
 
@@ -118,6 +124,63 @@ def fun_read_data_file(us_id, time_write, exp_inc, categories_write, suma_write)
         for line in input_file:
             output_file.write(f"{line_number}: {line}")
             line_number += 1'''
+
+
+def fun_read_data_file(period: str, cat_exp_inc: str, categories: str, data: str):
+
+    with open(FILENAME, 'r') as file:
+
+        list_for_data = []
+        total = 0
+
+        for line in file:
+            match = re.match(re_exp_inc, line)
+            if match:
+                group1 = match.group(1)  # Group 1: 2
+                group2 = match.group(2)  # Group 2: 444238872
+                group3 = match.group(3)  # Group 3: 16:24:37
+                group4 = match.group(4)  # Group 4: 26/08/2023
+                group5 = match.group(5)  # Group 5: income/expense
+                group6 = match.group(6)  # Group 6: ['food', 'transport', 'entertainment']
+                group7 = match.group(7)  # Group 7: 9642
+
+            match period:
+                case "day":
+                    if cat_exp_inc == group5 and categories == group6 and data == group4:
+                        total += int(group7)
+
+                        list_for_data.append(f'{group1} {group3} - {group4} - {group5} - {group6} - {group7}')
+                        result = '\n'.join([f"{i + 1}. {t}" for i, t in enumerate(list_for_data)])
+
+                case "month":
+                    data_index_group = str(group4.split(' '))
+                    parts_group = data_index_group.split("-")[1]
+
+                    data_index = str(data.split(' '))
+                    parts = data_index.split("-")[1]
+
+                    if parts_group == parts:
+                        if cat_exp_inc == group5 and categories == group6:
+                            total += int(group7)
+
+                            list_for_data.append(f'{group1} {group3} - {group4} - {group5} - {group6} - {group7}')
+                            result = '\n'.join([f"{i + 1}. {t}" for i, t in enumerate(list_for_data)])
+                case "year":
+
+                    data_index_group = str(group4.split(' '))
+                    parts_group = data_index_group.split("-")[0]
+
+                    data_index = str(data.split(' '))
+                    parts = data_index.split("-")[0]
+
+                    if parts_group == parts:
+                        if cat_exp_inc == group5 and categories == group6:
+                            total += int(group7)
+
+                            list_for_data.append(f'{group1} {group3} - {group4} - {group5} - {group6} - {group7}')
+                            result = '\n'.join([f"{i + 1}. {t}" for i, t in enumerate(list_for_data)])
+
+    return f"{result}\n\nTotal: {total}"
 
 
 async def start(update: Update, context: CallbackContext) -> None:
@@ -154,7 +217,7 @@ async def start_add_expense(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     else:
         finance_tracker = FinanceTracker(time_string, 'expense', categories, suma)
-        fun_read_data_file(user_id, time_string, 'expense', categories, suma)
+        fun_write_data_file(user_id, time_string, 'expense', categories, suma)
 
     await update.message.reply_text(f"{finance_tracker} Successful")
 
@@ -171,7 +234,7 @@ async def start_add_income(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     finance_tracker = FinanceTracker(time_string, 'income', categories, suma)
-    fun_read_data_file(user_id, time_string, 'income', categories, suma)
+    fun_write_data_file(user_id, time_string, 'income', categories, suma)
 
     await update.message.reply_text(f"{finance_tracker} Successful")
 
@@ -280,17 +343,14 @@ async def view_expenses_by_week(update: Update, context: CallbackContext) -> Non
         return
 
     list_for_data = []
-
+    total = 0
     with open(FILENAME, 'r') as file:
-
-        filtered_data = []
 
         for line in file:
             match = re.match(re_exp_inc, line)
             if match:
                 group1 = match.group(1)  # Group 1: 2
                 group2 = match.group(2)  # Group 2: 444238872
-                group3 = match.group(3)  # Group 3: 16:24:37
                 group4 = match.group(4)  # Group 4: 26/08/2023
                 group5 = match.group(5)  # Group 5: income/expense
                 group6 = match.group(6)  # Group 6: ['food', 'transport', 'entertainment']
@@ -299,12 +359,68 @@ async def view_expenses_by_week(update: Update, context: CallbackContext) -> Non
                 line_date = datetime.strptime(group4, "%Y-%m-%d").date()
 
                 if group5 == 'expense' and int(group2) == user_id and current_week_start <= line_date <= current_week_end:
+                    total += int(group7)
                     list_for_data.append(f'{int(group1)}: {group6} - {group7}')
 
         for _ in list_for_data:
             result = '\n'.join(list_for_data)
 
-    await update.message.reply_text(f"All_transactions week:\n{result}")
+    await update.message.reply_text(f"All_transactions week:\n{result}\n\nTotal: {total}")
+
+
+async def view_expenses_by_month(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+
+    logging.info('Command "/view_expenses_by_month" was triggered')
+
+    if fun_check_user_id(user_id) != user_id:
+        await update.message.reply_text("You don't have any expense to remove")
+        return
+
+    list_for_data = []
+    total = 0
+    with open(FILENAME, 'r') as file:
+
+        for line in file:
+            match = re.match(re_exp_inc, line)
+            if match:
+                group1 = match.group(1)  # Group 1: 2
+                group2 = match.group(2)  # Group 2: 444238872
+                group4 = match.group(4)  # Group 4: 26/08/2023
+                group5 = match.group(5)  # Group 5: income/expense
+                group6 = match.group(6)  # Group 6: ['food', 'transport', 'entertainment']
+                group7 = match.group(7)  # Group 7: 9642
+
+                line_date = datetime.strptime(group4, "%Y-%m-%d").date()
+
+                if group5 == 'expense' and int(group2) == user_id and current_month_start <= line_date <= current_month_end:
+                    total += int(group7)
+                    list_for_data.append(f'{int(group1)}: {group6} - {group7}')
+
+        for _ in list_for_data:
+            result = '\n'.join(list_for_data)
+
+    await update.message.reply_text(f"All_transactions month:\n{result}\n\nTotal: {total}")
+
+
+async def statistics(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+
+    logging.info('Command "/statistics" was triggered')
+
+    if fun_check_user_id(user_id) != user_id:
+        await update.message.reply_text("You don't have any expense to remove")
+        return
+
+    user_message = " ".join(context.args).split("|")
+    period = user_message[0].strip()
+    cat_exp_inc = user_message[1].strip()
+    categories = user_message[2].strip()
+    data = user_message[3].strip()
+
+    df = fun_read_data_file(period, cat_exp_inc, categories, data)
+
+    await update.message.reply_text(df)
 
 
 async def remove_expense(update: Update, context: CallbackContext) -> None:
@@ -392,6 +508,9 @@ def run():
     app.add_handler(CommandHandler("remove_income", remove_income))
     app.add_handler(CommandHandler("view_all_transactions", view_all_transactions))
     app.add_handler(CommandHandler("view_transactions_week", view_expenses_by_week))
+    app.add_handler(CommandHandler("view_transactions_month", view_expenses_by_month))
+    app.add_handler(CommandHandler("statistics", statistics))
+
 
     app.run_polling()
 
